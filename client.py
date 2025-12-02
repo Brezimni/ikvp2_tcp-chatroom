@@ -1,20 +1,28 @@
-import socket, threading, sys
+import socket, threading, sys, os
 
 def main():
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client.connect(( "127.0.0.1", 9090 ))
+    server_ip = input("Vnesi IP serverja: ")
+    server_port = int(input("Vnesi port serverja: "))
+    client.connect(( server_ip, server_port ))
 
     connected = False
     username = input("Izberi si ime: ")
 
     def receive():
         nonlocal connected
+        nonlocal username
         while True:
             try:
                 message = client.recv(1024).decode()
-                if message == "::ime" and not connected:
+                if not message.strip():
+                    print("\nPovezava je bila prekinjena.")
+                    client.close()
+                    os._exit(0)
+                elif message == "::ime" and not connected:
                     client.send(username.encode())
-                    connection_state = True
+                    connected = True
+                    continue
                 else:
                     print_message(message)
             except Exception as e:
@@ -25,22 +33,22 @@ def main():
     def print_message(msg: str):
         nonlocal username
         sys.stdout.write("\r" + msg + "\n")
-        sys.stdout.write(f'{username}:')
+        sys.stdout.write(f'\033[32m{username}\033[0m: ')
         sys.stdout.flush()
  
     def send():
         nonlocal username
+        omit_input = True
         while True:
             try:
-                message = input(f'{username}: ')
+                message = input(f'\033[32m{username}\033[0m: ' if not omit_input else '')
+                if omit_input: omit_input = False
                 if not message.strip():
                     continue
-                elif message.startswith("::"):
-                    print("Ukaz je:", message.replace("::", ""))
                 else:
-                    client.send(f"{username}: {message}".encode())
+                    client.send(message.encode())
             except:
-                print("Povezava prekinjena.")
+                print("Povezava prekinjena.")   
                 client.close()
                 break
     
