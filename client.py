@@ -14,8 +14,8 @@ def main():
         nonlocal username
         while True:
             try:
-                message = client.recv(1024).decode()
-                if not message.strip():
+                message = client.recv(1024).decode('utf-8')
+                if not message.strip(): # Če prejemamo prazen niz, pomeni, da se je povezava prekinila
                     print("\nPovezava je bila prekinjena.")
                     client.close()
                     os._exit(0)
@@ -23,6 +23,9 @@ def main():
                     client.send(username.encode())
                     connected = True
                     continue
+                elif message.startswith("\033[30;47mserver\033[0m: ::ime"):
+                    username = message.rsplit("spremenjeno v ", 1)[1].strip()
+                    print_message(message.replace("::ime ", ""))
                 else:
                     print_message(message)
             except Exception as e:
@@ -38,13 +41,17 @@ def main():
  
     def send():
         nonlocal username
-        omit_input = True
+        first_time = True # Prepreči, da bi se input besedilo ob zagonu izpisalo dvakrat
         while True:
             try:
-                message = input(f'\033[32m{username}\033[0m: ' if not omit_input else '')
-                if omit_input: omit_input = False
-                if not message.strip():
+                message = input('' if first_time else f'\033[32m{username}\033[0m: ').strip()
+                if first_time: first_time = False
+
+                if not message:
                     continue
+                elif message.startswith("::izpis"):
+                    client.close()
+                    os._exit(0)
                 else:
                     client.send(message.encode())
             except:

@@ -1,9 +1,9 @@
-import socket, threading, time
+import socket, threading
 import server_utils
 
 HOST = '0.0.0.0'
 PORT = int(input("Izberi port: "))
-SERVER_VERSION = "1.3"
+SERVER_VERSION = "1.4"
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.bind(( HOST, PORT ))
@@ -47,6 +47,17 @@ def handle_connection(client):
                     print(e)
                     message = server_utils.construct_message("server", "Ta uporabnik ne obstaja.", "opozorilo")
                     client.send(message)
+            elif message.startswith("::seznam"):
+                message = server_utils.construct_message("server", ", ".join([clients[c] for c in clients]), "obvestilo")
+                client.send(message)
+            elif message.startswith("::ime"):
+                with clients_lock:
+                    novo_ime = message[5:].strip()
+                    if novo_ime in clients.values():
+                        client.send(server_utils.construct_message('server', f'Ime {novo_ime} je že zasedeno.', 'opozrilo'))
+                    else:
+                        clients[client] = novo_ime
+                        client.send(server_utils.construct_message('server', f'::ime Ime je bilo uspešno spremenjeno v {novo_ime}', 'obvestilo'))
             else:
                 message = server_utils.construct_message(clients[client], message, 'navadno')
                 broadcast(message, client)
@@ -81,21 +92,34 @@ def connect_client():
 
         client.send("::ime".encode())
         username = client.recv(1024).decode()
+        
+        with clients_lock:
+            # Check if username already exists
+            original_username = username
+            counter = 1
+            while username in clients.values():
+                username = f"{original_username}_{counter}"
+                counter += 1
+
+            message = "Povezava je bila uspešno vzpostavljena." if username is original_username else f"::ime Povezava je bila uspešno vzpostavljena, uporabniško ime je bilo spremenjeno v {username}"
+            client.send(server_utils.construct_message(
+                "server", 
+                message,
+                "obvestilo"))
+        
         clients[client] = username
+
         print(f"{username} je {address[0]}.")
 
         message = server_utils.construct_message("server", f"{username} se je pridružil/a pogovoru.", "obvestilo")
         broadcast(message, client)
-        message = server_utils.construct_message("server", "Povezava je bila uspešno vzpostavljena.", "obvestilo")
-        client.send(message)
-
         thread = threading.Thread(target = handle_connection, args = (client,))
         thread.start()
 
 def admin_console():
     while True:
         command = input('').split(" ", 1)
-        if command[0] == "izklop":
+        if command[0] == "izpis":
             message = server_utils.construct_message("server", "Server se bo izklopil.", "opozorilo")
             broadcast(message)
             for client in list(clients.keys()):
@@ -103,7 +127,7 @@ def admin_console():
             server.close()
             print("Server je izklopljen.")
         elif command[0] == "?":
-            print("Seznam ukazov:")
+            print("Seznam ukazov:", "- izpis (zklopi server)", "- ip (izpiše ip in port)", "- oznani <sporočilo> (sporočilo vsem uporabnikom)", "- odstrani/blokar <ime_uporabnika> (prekine povezavo z uporabnikom in ga po potrebi doda na črno listo)", sep="\n")
         elif command[0] == "ip":
             print(server_ip, ":", PORT, sep="")
         elif command[0] == "oznani":
